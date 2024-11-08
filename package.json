@@ -1,0 +1,25 @@
+{
+  "name": "postgres-context-server",
+  "version": "0.1.0",
+  "description": "a model context protocol server for postgres",
+  "main": "index.mjs",
+  "type": "module",
+  "files": [
+    "vendor",
+    "index.mjs"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zed-industries/postgres-context-server.git"
+  },
+  "author": "",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/zed-industries/postgres-context-server/issues"
+  },
+  "homepage": "https://github.com/zed-industries/postgres-context-server#readme",
+  "dependencies": {
+    "pg": "^8.13.1",
+    "zod": "^3.23.8"
+  }
+}
