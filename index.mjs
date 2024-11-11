@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
 import pg from "pg";
-import { Server } from "./vendor/modelcontextprotocol-typescript-sdk/dist/server/index.js";
-import { StdioServerTransport } from "./vendor/modelcontextprotocol-typescript-sdk/dist/server/stdio.js";
+import { Server } from "@modelcontextprotocol/sdk/server/index.js";
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import {
   CallToolRequestSchema,
   ListResourcesRequestSchema,
@@ -10,7 +10,7 @@ import {
   ListToolsRequestSchema,
   ReadResourceRequestSchema,
   GetPromptRequestSchema,
-} from "./vendor/modelcontextprotocol-typescript-sdk/dist/types.js";
+} from "@modelcontextprotocol/sdk/types.js";
 
 const server = new Server({
   name: "example-servers/postgres",
