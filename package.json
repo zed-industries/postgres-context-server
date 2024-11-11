@@ -4,6 +4,9 @@
   "description": "a model context protocol server for postgres",
   "main": "index.mjs",
   "type": "module",
+  "publishConfig": {
+    "access": "public"
+  },
   "files": [
     "vendor",
     "index.mjs"
