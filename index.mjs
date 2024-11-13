@@ -10,6 +10,7 @@ import {
   ListToolsRequestSchema,
   ReadResourceRequestSchema,
   GetPromptRequestSchema,
+  CompleteRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 
 const server = new Server({
@@ -127,6 +128,29 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   throw new Error("Tool not found");
 });
 
+server.setRequestHandler(CompleteRequestSchema, async (request) => {
+  process.stderr.write("Handling completions/complete request\n");
+
+  if (request.params.ref.name === "postgres-table-schema") {
+    const client = await pool.connect();
+    try {
+      const result = await client.query(
+        "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'",
+      );
+      const tables = result.rows.map((row) => row.table_name);
+      return {
+        completion: {
+          values: tables,
+        },
+      };
+    } finally {
+      client.release();
+    }
+  }
+
+  throw new Error("unknown prompt");
+});
+
 server.setRequestHandler(ListPromptsRequestSchema, async () => {
   process.stderr.write("Handling prompts/list request\n");
 
@@ -165,6 +189,7 @@ server.setRequestHandler(GetPromptRequestSchema, async (request) => {
       );
 
       return {
+        description: `${tableName} schema`,
         messages: [
           {
             role: "user",
