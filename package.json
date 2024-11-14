@@ -1,6 +1,6 @@
 {
   "name": "@zeddotdev/postgres-context-server",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "a model context protocol server for postgres",
   "main": "index.mjs",
   "type": "module",
