@@ -14,17 +14,15 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 
 const server = new Server({
-  name: "example-servers/postgres",
+  name: "postgres-context-server",
   version: "0.1.0",
 });
 
-const args = process.argv.slice(2);
-if (args.length === 0) {
-  console.error("Please provide a database URL as a command-line argument");
+const databaseUrl = process.env.DATABASE_URL;
+if (typeof databaseUrl == null || databaseUrl.trim().length === 0) {
+  console.error("Please provide a DATABASE_URL environment variable");
   process.exit(1);
 }
-
-const databaseUrl = args[0];
 
 const resourceBaseUrl = new URL(databaseUrl);
 resourceBaseUrl.protocol = "postgres:";
@@ -198,13 +196,18 @@ server.setRequestHandler(GetPromptRequestSchema, async (request) => {
     const client = await pool.connect();
 
     try {
-      const select = "SELECT column_name, data_type, is_nullable, column_default, table_name FROM information_schema.columns"
+      const select =
+        "SELECT column_name, data_type, is_nullable, column_default, table_name FROM information_schema.columns";
 
       let result;
       if (tableName === ALL_TABLES) {
-        result = await client.query(`${select} WHERE table_schema NOT IN ('pg_catalog', 'information_schema')`);
+        result = await client.query(
+          `${select} WHERE table_schema NOT IN ('pg_catalog', 'information_schema')`,
+        );
       } else {
-        result = await client.query(`${select} WHERE table_name = $1` [tableName] );
+        result = await client.query(
+          `${select} WHERE table_name = $1`, [tableName],
+        );
       }
 
       const allTableNames = Array.from(
