@@ -36,6 +36,8 @@ const pool = new pg.Pool({
 });
 
 const SCHEMA_PATH = "schema";
+const SCHEMA_PROMPT_NAME = "pg-schema";
+const ALL_TABLES = "all-tables";
 
 server.setRequestHandler(ListResourcesRequestSchema, async () => {
   const client = await pool.connect();
@@ -131,7 +133,18 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 server.setRequestHandler(CompleteRequestSchema, async (request) => {
   process.stderr.write("Handling completions/complete request\n");
 
-  if (request.params.ref.name === "postgres-table-schema") {
+  if (request.params.ref.name === SCHEMA_PROMPT_NAME) {
+    const tableNameQuery = request.params.argument.value;
+    const alreadyHasArg = /\S*\s/.test(tableNameQuery);
+
+    if (alreadyHasArg) {
+      return {
+        completion: {
+          values: [],
+        },
+      };
+    }
+
     const client = await pool.connect();
     try {
       const result = await client.query(
@@ -140,7 +153,7 @@ server.setRequestHandler(CompleteRequestSchema, async (request) => {
       const tables = result.rows.map((row) => row.table_name);
       return {
         completion: {
-          values: tables,
+          values: [ALL_TABLES, ...tables],
         },
       };
     } finally {
@@ -157,7 +170,7 @@ server.setRequestHandler(ListPromptsRequestSchema, async () => {
   return {
     prompts: [
       {
-        name: "postgres-table-schema",
+        name: SCHEMA_PROMPT_NAME,
         description:
           "Retrieve the schema for a given table in the postgres database",
         arguments: [
@@ -175,27 +188,66 @@ server.setRequestHandler(ListPromptsRequestSchema, async () => {
 server.setRequestHandler(GetPromptRequestSchema, async (request) => {
   process.stderr.write("Handling prompts/get request\n");
 
-  if (request.params.name === "postgres-table-schema") {
+  if (request.params.name === SCHEMA_PROMPT_NAME) {
     const tableName = request.params.arguments?.tableName;
+
     if (typeof tableName !== "string" || tableName.length === 0) {
       throw new Error(`Invalid tableName: ${tableName}`);
     }
 
     const client = await pool.connect();
+
     try {
-      const result = await client.query(
-        "SELECT column_name, data_type FROM information_schema.columns WHERE table_name = $1",
-        [tableName],
+      const select = "SELECT column_name, data_type, is_nullable, column_default, table_name FROM information_schema.columns"
+
+      let result;
+      if (tableName === ALL_TABLES) {
+        result = await client.query(`${select} WHERE table_schema NOT IN ('pg_catalog', 'information_schema')`);
+      } else {
+        result = await client.query(`${select} WHERE table_name = $1` [tableName] );
+      }
+
+      const allTableNames = Array.from(
+        new Set(result.rows.map((row) => row.table_name).sort()),
       );
 
+      let sql = "```sql\n";
+      for (let i = 0, len = allTableNames.length; i < len; i++) {
+        const tableName = allTableNames[i];
+        if (i > 0) {
+          sql += "\n";
+        }
+
+        sql += [
+          `create table "${tableName}" (`,
+          result.rows
+            .filter((row) => row.table_name === tableName)
+            .map((row) => {
+              const notNull = row.is_nullable === "NO" ? "" : " not null";
+              const defaultValue =
+                row.column_default != null
+                  ? ` default ${row.column_default}`
+                  : "";
+              return `    "${row.column_name}" ${row.data_type}${notNull}${defaultValue}`;
+            })
+            .join(",\n"),
+          ");",
+        ].join("\n");
+        sql += "\n";
+      }
+      sql += "```";
+
       return {
-        description: `${tableName} schema`,
+        description:
+          tableName === ALL_TABLES
+            ? "all table schemas"
+            : `${tableName} schema`,
         messages: [
           {
             role: "user",
             content: {
               type: "text",
-              text: JSON.stringify(result.rows, null, 2),
+              text: sql,
             },
           },
         ],
