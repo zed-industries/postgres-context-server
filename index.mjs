@@ -91,6 +91,32 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
     tools: [
       {
+        name: "pg-schema",
+        description: "Returns the schema for a Postgres database.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            mode: {
+              type: "string",
+              enum: ["all", "specific"],
+              description: "Mode of schema retrieval",
+            },
+            tableName: {
+              type: "string",
+              description:
+                "Name of the specific table (required if mode is 'specific')",
+            },
+          },
+          required: ["mode"],
+          if: {
+            properties: { mode: { const: "specific" } },
+          },
+          then: {
+            required: ["tableName"],
+          },
+        },
+      },
+      {
         name: "query",
         description: "Run a read-only SQL query",
         inputSchema: {
@@ -105,6 +131,26 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 });
 
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
+  if (request.params.name === "pg-schema") {
+    const tableName = request.params.arguments?.tableName;
+
+    if (typeof tableName !== "string" || tableName.length === 0) {
+      throw new Error(`Invalid tableName: ${tableName}`);
+    }
+
+    const client = await pool.connect();
+
+    try {
+      const sql = await getSchema(client, tableName);
+
+      return {
+        content: [{ type: "text", text: sql }],
+      };
+    } finally {
+      client.release();
+    }
+  }
+
   if (request.params.name === "query") {
     const sql = request.params.arguments?.sql;
 
@@ -112,7 +158,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     try {
       await client.query("BEGIN TRANSACTION READ ONLY");
       const result = await client.query(sql);
-      return { toolResult: result.rows };
+      return {
+        content: [
+          { type: "text", text: JSON.stringify(result.rows, undefined, 2) },
+        ],
+      };
     } catch (error) {
       throw error;
     } finally {
@@ -125,6 +175,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       client.release();
     }
   }
+
   throw new Error("Tool not found");
 });
 
@@ -196,49 +247,7 @@ server.setRequestHandler(GetPromptRequestSchema, async (request) => {
     const client = await pool.connect();
 
     try {
-      const select =
-        "SELECT column_name, data_type, is_nullable, column_default, table_name FROM information_schema.columns";
-
-      let result;
-      if (tableName === ALL_TABLES) {
-        result = await client.query(
-          `${select} WHERE table_schema NOT IN ('pg_catalog', 'information_schema')`,
-        );
-      } else {
-        result = await client.query(
-          `${select} WHERE table_name = $1`, [tableName],
-        );
-      }
-
-      const allTableNames = Array.from(
-        new Set(result.rows.map((row) => row.table_name).sort()),
-      );
-
-      let sql = "```sql\n";
-      for (let i = 0, len = allTableNames.length; i < len; i++) {
-        const tableName = allTableNames[i];
-        if (i > 0) {
-          sql += "\n";
-        }
-
-        sql += [
-          `create table "${tableName}" (`,
-          result.rows
-            .filter((row) => row.table_name === tableName)
-            .map((row) => {
-              const notNull = row.is_nullable === "NO" ? "" : " not null";
-              const defaultValue =
-                row.column_default != null
-                  ? ` default ${row.column_default}`
-                  : "";
-              return `    "${row.column_name}" ${row.data_type}${notNull}${defaultValue}`;
-            })
-            .join(",\n"),
-          ");",
-        ].join("\n");
-        sql += "\n";
-      }
-      sql += "```";
+      const sql = await getSchema(client, tableName);
 
       return {
         description:
@@ -262,6 +271,55 @@ server.setRequestHandler(GetPromptRequestSchema, async (request) => {
 
   throw new Error(`Prompt '${request.params.name}' not implemented`);
 });
+
+/**
+ * @param tableNameOrAll {string}
+ */
+async function getSchema(client, tableNameOrAll) {
+  const select =
+    "SELECT column_name, data_type, is_nullable, column_default, table_name FROM information_schema.columns";
+
+  let result;
+  if (tableNameOrAll === ALL_TABLES) {
+    result = await client.query(
+      `${select} WHERE table_schema NOT IN ('pg_catalog', 'information_schema')`,
+    );
+  } else {
+    result = await client.query(`${select} WHERE table_name = $1`, [
+      tableNameOrAll,
+    ]);
+  }
+
+  const allTableNames = Array.from(
+    new Set(result.rows.map((row) => row.table_name).sort()),
+  );
+
+  let sql = "```sql\n";
+  for (let i = 0, len = allTableNames.length; i < len; i++) {
+    const tableName = allTableNames[i];
+    if (i > 0) {
+      sql += "\n";
+    }
+
+    sql += [
+      `create table "${tableName}" (`,
+      result.rows
+        .filter((row) => row.table_name === tableName)
+        .map((row) => {
+          const notNull = row.is_nullable === "NO" ? "" : " not null";
+          const defaultValue =
+            row.column_default != null ? ` default ${row.column_default}` : "";
+          return `    "${row.column_name}" ${row.data_type}${notNull}${defaultValue}`;
+        })
+        .join(",\n"),
+      ");",
+    ].join("\n");
+    sql += "\n";
+  }
+  sql += "```";
+
+  return sql;
+}
 
 async function runServer() {
   const transport = new StdioServerTransport();
