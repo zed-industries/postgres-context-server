@@ -132,11 +132,26 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   if (request.params.name === "pg-schema") {
-    const tableName = request.params.arguments?.tableName;
+    const mode = request.params.arguments?.mode;
 
-    if (typeof tableName !== "string" || tableName.length === 0) {
-      throw new Error(`Invalid tableName: ${tableName}`);
-    }
+    const tableName = (() => {
+      switch (mode) {
+        case "specific": {
+          const tableName = request.params.arguments?.tableName;
+
+          if (typeof tableName !== "string" || tableName.length === 0) {
+            throw new Error(`Invalid tableName: ${tableName}`);
+          }
+
+          return tableName;
+        }
+        case "all": {
+          return ALL_TABLES;
+        }
+        default:
+          throw new Error(`Invalid mode: ${mode}`);
+      }
+    })();
 
     const client = await pool.connect();
 
