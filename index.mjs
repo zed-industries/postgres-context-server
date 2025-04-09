@@ -172,7 +172,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const client = await pool.connect();
     try {
       await client.query("BEGIN TRANSACTION READ ONLY");
-      const result = await client.query(sql);
+      // Force a prepared statement: Prevents multiple statements in the same query.
+      // Name is unique per session, but we use a single session per query.
+      const result = await client.query({
+        name: "sandboxed-statement",
+        text: sql,
+        values: [],
+      });
       return {
         content: [
           { type: "text", text: JSON.stringify(result.rows, undefined, 2) },
@@ -187,7 +193,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           console.warn("Could not roll back transaction:", error),
         );
 
-      client.release();
+      // Destroy session to clean up resources.
+      client.release(true);
     }
   }
 
