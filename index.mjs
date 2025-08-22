@@ -28,7 +28,8 @@ const resourceBaseUrl = new URL(databaseUrl);
 resourceBaseUrl.protocol = "postgres:";
 resourceBaseUrl.password = "";
 
-process.stderr.write("starting server. url: " + databaseUrl + "\n");
+process.stderr.write("starting server\n");
+
 const pool = new pg.Pool({
   connectionString: databaseUrl,
 });
