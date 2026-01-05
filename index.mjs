@@ -13,10 +13,20 @@ import {
   CompleteRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 
-const server = new Server({
-  name: "postgres-context-server",
-  version: "0.1.0",
-});
+const server = new Server(
+  {
+    name: "postgres-context-server",
+    version: "0.1.0",
+  },
+  {
+    capabilities: {
+      resources: {},
+      tools: {},
+      prompts: {},
+      completions: {},
+    },
+  },
+);
 
 const databaseUrl = process.env.DATABASE_URL;
 if (typeof databaseUrl == null || databaseUrl.trim().length === 0) {
